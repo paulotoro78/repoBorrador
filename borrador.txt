@@ -1,0 +1,375 @@
+Perfecto. Dejamos “logs” en pausa y retomamos EXE + auto-arranque + auto-levantarse si se cae (lo más importante para un sistema de marcación).
+
+Voy a darte un procedimiento 100% práctico para Windows + tu WinForms .NET Framework 4.8, sin depender de Program.cs.
+
+1) Generar el ejecutable (EXE) para producción
+Paso 1.1 — Compilar en Release
+
+En Visual Studio, arriba donde dice Debug, cámbialo a Release.
+
+Menú: Compilar → Recompilar solución (mejor que “Compilar solución”).
+
+Paso 1.2 — Ubicar el EXE
+
+Tu salida puede ser:
+
+...\bin\Release\
+o (por tu configuración actual)
+
+...\bin\
+
+En tu consola viste que carga desde:
+...\PreviewDemo\bin\PreviewDemo.exe
+
+Así que en tu caso lo más probable es que el EXE quede en:
+
+C:\Users\userbiom\Desktop\1-Preview-PreviewDemo\PreviewDemo\bin\
+
+✅ Confírmalo buscando en esa carpeta PreviewDemo.exe.
+
+2) “Instalar” el sistema en una ruta fija (como ya definiste)
+
+Tú ya definiste:
+
+C:\AsistenciaBiometrico
+Paso 2.1 — Copiar archivos necesarios
+
+Copia a C:\AsistenciaBiometrico\:
+
+PreviewDemo.exe
+
+todas las .dll que estén junto al exe (por ejemplo MySql.Data.dll, dlls del SDK, etc.)
+
+App.config si aplica (a veces se copia como PreviewDemo.exe.config)
+
+carpeta Resources no hace falta porque se compila dentro, pero si tienes archivos externos, también.
+
+📌 Regla de oro: copia todo lo que está en la carpeta de salida (bin) junto al exe, excepto cosas obvias de dev si existieran.
+
+✅ Prueba: doble clic al C:\AsistenciaBiometrico\PreviewDemo.exe y confirma que abre y conecta.
+
+3) Auto-arranque y auto-recuperación si se cae (Windows Task Scheduler)
+
+Esto es lo que realmente hace que “se levante solo”.
+
+Paso 3.1 — Abrir Programador de tareas
+
+Win + R → escribe:
+
+taskschd.msc
+Paso 3.2 — Crear tarea (NO “básica”)
+
+Panel derecho → Crear tarea…
+
+Pestaña General
+
+Nombre: AsistenciaBiometrico
+
+✅ Ejecutar tanto si el usuario inició sesión como si no
+
+✅ Ejecutar con los privilegios más altos
+
+Configurar para: tu Windows
+
+Pestaña Desencadenadores
+
+Nuevo…
+
+“Iniciar la tarea”: Al iniciar el sistema
+
+✅ Retrasar: 30 segundos (recomendado para que cargue red/servicios)
+
+( opcional recomendado ) Nuevo…
+
+“Iniciar la tarea”: Al iniciar sesión
+Esto ayuda si tu PC se queda en pantalla de login y tú quieres que apenas entre el usuario arranque sí o sí.
+
+Pestaña Acciones
+
+Nuevo…
+
+Acción: Iniciar un programa
+
+Programa o script:
+
+C:\AsistenciaBiometrico\PreviewDemo.exe
+
+Iniciar en:
+
+C:\AsistenciaBiometrico
+Pestaña Condiciones (según tu caso)
+
+Si dependes de BD/Red, puedes marcar:
+✅ “Iniciar solo si la conexión de red está disponible”
+(si esto te causa que no arranque nunca, lo quitamos)
+
+Pestaña Configuración (CLAVE para “se levante solo”)
+
+Marca:
+
+✅ Reiniciar la tarea si se produce un error
+
+Cada: 1 minuto
+
+Intentos: 999 (o un número alto)
+
+✅ “Si la tarea ya se está ejecutando, entonces…”:
+No iniciar una nueva instancia
+
+✅ “Si la tarea se detiene, reiniciar cada…”:
+
+(si te aparece esa opción en tu Windows) pon 1 minuto
+
+📌 Esto es lo que hace que si el programa crashea o muere, Windows lo re-ejecute.
+
+4) Pruebas obligatorias (para confirmar que realmente se “levanta”)
+Prueba A — Reinicio
+
+Cierra el programa.
+
+Reinicia Windows.
+
+Espera 30–60 segundos.
+✅ Debe abrir solo.
+
+Prueba B — “Se cayó”
+
+Abre el programa.
+
+Mátalo desde el Administrador de tareas:
+
+Ctrl + Shift + Esc → Finalizar tarea
+
+Espera 1–2 minutos.
+✅ Debe volver a abrir solo (por la tarea).
+
+5) Importante: evitar duplicados (sin tocar Program.cs)
+
+Como Task Scheduler puede ejecutar al inicio de sistema y al iniciar sesión, puede intentar abrirlo 2 veces si coincide.
+
+Solución rápida (código) dentro de FrmAsistencia_Load al inicio:
+
+var current = Process.GetCurrentProcess();
+var procesos = Process.GetProcessesByName(current.ProcessName);
+
+if (procesos.Length > 1)
+{
+    Application.Exit();
+    return;
+}
+
+📍 Dónde: primera línea de FrmAsistencia_Load.
+
+✅ Esto evita 2 instancias.
+
+6) Pregunta final que define si Task Scheduler basta o necesitas servicio
+
+Para un sistema de marcación, lo típico es:
+
+Si la PC siempre tiene usuario logueado → Task Scheduler basta.
+
+Si la PC puede estar en pantalla de login y aún así quieres que corra → Task Scheduler con “al iniciar sistema” + “aunque no haya sesión” (lo que te puse).
+
+Si quieres “nivel industrial” (sin UI, 24/7, sin depender de sesión) → Servicio Windows (más complejo).
+
+Lo siguiente que hagas ahora
+
+Compila en Release
+
+Copia a C:\AsistenciaBiometrico
+
+Ejecuta desde esa carpeta para validar que abre
+
+Crea la tarea con la configuración exacta
+
+Si quieres, dime:
+
+¿Tu exe final se llama exactamente PreviewDemo.exe?
+
+¿La PC destino inicia sesión automáticamente o se queda en login?
+
+Y te ajusto los triggers exactos (para que no se duplique y arranque siempre).
+
+explica paso a paso la parte de la tarea
+
+Perfecto. Aquí va paso a paso la creación de la tarea en Windows para que:
+
+✅ se ejecute al prender/reiniciar
+
+✅ se vuelva a levantar si se cae
+
+✅ no se abra 2 veces
+
+Asumo que tu exe quedará en:
+
+C:\AsistenciaBiometrico\PreviewDemo.exe
+
+1) Abrir el Programador de tareas
+
+Presiona Win + R
+
+Escribe:
+
+taskschd.msc
+
+Enter
+
+Se abre Programador de tareas.
+
+2) Crear la tarea (NO “tarea básica”)
+
+En la columna derecha (panel “Acciones”):
+
+Clic en Crear tarea…
+
+⚠️ No uses “Crear tarea básica”, porque la básica no te da todas las opciones de reinicio.
+
+3) Pestaña: General
+
+En la ventana que se abre:
+
+Nombre
+
+En Nombre: escribe:
+
+AsistenciaBiometrico
+Opciones importantes (marca estas)
+
+✅ Ejecutar tanto si el usuario inició sesión como si no
+
+✅ Ejecutar con los privilegios más altos
+
+Configurar para
+
+En “Configurar para”: elige tu Windows (normalmente ya viene bien).
+
+Luego pasa a Desencadenadores.
+
+4) Pestaña: Desencadenadores
+
+Aquí definimos cuándo se ejecuta.
+
+Clic en Nuevo…
+
+En “Iniciar la tarea”: selecciona:
+
+Al iniciar el sistema
+
+Marca (recomendado):
+
+✅ Retrasar la tarea durante: 30 segundos
+
+Asegúrate que esté:
+
+✅ Habilitado
+
+Clic Aceptar
+
+(Con esto ya arranca al prender/reiniciar)
+
+5) Pestaña: Acciones
+
+Aquí definimos qué se ejecuta.
+
+Clic en Nuevo…
+
+Acción: Iniciar un programa
+
+En Programa o script, pon exactamente:
+
+C:\AsistenciaBiometrico\PreviewDemo.exe
+
+(puedes usar “Examinar…” para seleccionarlo)
+
+En Iniciar en (opcional) pon:
+
+C:\AsistenciaBiometrico
+
+✅ Esto es MUY importante para que encuentre DLLs y cree carpetas (logs, etc.)
+
+Clic Aceptar
+
+6) Pestaña: Condiciones
+
+Esto depende de tu caso.
+
+Si tu app necesita red/SQL y a veces Windows inicia sin red lista, tienes 2 opciones:
+
+Opción recomendada
+
+Deja sin marcar “Iniciar solo si la conexión de red está disponible”
+
+(porque a veces esa opción impide que arranque)
+
+Como ya pusimos “retraso 30 segundos”, normalmente basta.
+
+7) Pestaña: Configuración (lo que hace que se “reviva”)
+
+Esta es la parte clave para que, si se cae, Windows la levante de nuevo.
+
+Marca / configura así:
+
+✅ Permitir que la tarea se ejecute a petición
+
+✅ Ejecutar la tarea lo antes posible después de que se haya omitido un inicio programado
+(útil si la PC estaba apagada)
+
+✅ Si la tarea falla, reiniciar cada: 1 minuto
+
+En Intentos de reinicio: pon 999 (o al menos 10)
+
+En Si la tarea ya se está ejecutando, entonces: selecciona:
+
+No iniciar una nueva instancia
+
+Esto evita que se abra 2 veces.
+
+8) Guardar la tarea
+
+Clic en Aceptar.
+
+Windows puede pedirte la contraseña del usuario (si marcaste “aunque no haya sesión”). La pones y guardas.
+
+9) Probar que funciona
+Prueba 1: Ejecutar manualmente
+
+En el panel izquierdo: Biblioteca del Programador de tareas
+
+Busca tu tarea: AsistenciaBiometrico
+
+Clic derecho → Ejecutar
+
+✅ Debe abrir tu programa.
+
+Prueba 2: Que se levante si lo matas
+
+Abre el Administrador de tareas (Ctrl + Shift + Esc)
+
+Busca PreviewDemo.exe
+
+Finalizar tarea
+
+Espera 1 minuto
+
+✅ Debe volver a abrirse solo (por el “reiniciar si falla”).
+
+Prueba 3: Reinicio de PC
+
+Reinicia el equipo
+
+Espera 30–60 segundos
+
+✅ Debe ejecutarse solo.
+
+Nota importante (para que “reiniciar si falla” funcione mejor)
+
+Windows considera “falla” cuando el proceso termina inesperadamente.
+Si alguien lo cierra con la X, a veces Windows no lo toma como “falla”.
+
+Si quieres cubrir también “si lo cierran manualmente”, hay dos caminos:
+
+Un “watchdog” (otra tarea que lo revise cada X minutos y lo abra si no está)
+
+O convertirlo a servicio
+
+Si quieres, te doy el método watchdog (también con pasos) porque es súper efectivo y simple.
